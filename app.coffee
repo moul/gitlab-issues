@@ -2,6 +2,7 @@
 
 {ApiV3} =  require 'gitlab'
 optimist = require 'optimist'
+async =    require 'async'
 
 argv = optimist
   .usage('Usage: $0 [-v] -u <url> -t <token>')
@@ -22,5 +23,23 @@ gitlab = new ApiV3
   verbose:      argv.verbose
   'strict-ssl': !argv.s
 
+
 gitlab.projects.all (projects) ->
-  console.log projects.length
+  project_ids = [project.id for project in projects][0]
+
+  # reduce function, called asynchronously for each projects
+  iterator = (memo, project_id, callback) ->
+    gitlab.projects.issues.list project_id, (issues) ->
+      if argv.verbose and issues.length
+        console.log "Project id: #{project_id}, new issues #{issues.length}"
+      process.nextTick ->
+        callback null, memo.concat(issues)
+
+  # asynchronous call
+  async.reduce project_ids, [], iterator, (err, issues) ->
+    if err
+      console.err err
+      process.exit -1
+
+    #console.log 'issues', issues.length
+    console.log JSON.stringify issues
